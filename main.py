@@ -7,6 +7,8 @@ import random
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
+query_object_storage = []  # In-memory storage for query objects, Long-term storage isn't necessary
+
 class QueryObject:
     def __init__(self, ip_address: str, id: int, query: str, results: dict):
         self.ip_address = ip_address  # IP Address as a string
@@ -20,8 +22,40 @@ def create_query_object(ip_address: str, id: int, query: str, results: dict={}) 
     return QueryObject(ip_address, id, query, results)
 
 def store_query_object(query_object: QueryObject):
-    # TODO: Implement storage in RAM
     logging.info(f"Storing query object: {query_object.__dict__}")
+    # Store the query object in the in-memory storage
+    query_object_storage.append(query_object)
+
+def retrieve_query_object(id: int) -> QueryObject:
+    # Retrieve the query object from the in-memory storage
+    for obj in query_object_storage:
+        if obj.id == id:
+            return obj
+    return None
+
+@app.route('/submit/', methods=['GET'])
+def submit():
+    id_param = request.args.get("id")
+    if id_param is None:
+        logging.error("Missing 'id' parameter")
+        return Response("Missing 'id' parameter", status=400)
+    try:
+        id_int = int(id_param)
+    except ValueError:
+        logging.error("Invalid 'id' parameter")
+        return Response("Invalid 'id' parameter", status=400)
+    selection_id = request.args.get("selection")
+    if not selection_id:
+        logging.error("Missing 'selection' parameter")
+        return Response("Missing 'selection' parameter", status=400)
+    # Valid request, start m3u8 retrieval
+    query_object = retrieve_query_object(id_int)
+    if not query_object:
+        logging.error(f"Query object with ID {id_int} not found")
+        return Response(f"Query object with ID {id_int} not found", status=404)
+    # TODO: Implement function to retrieve m3u8 file from VRM
+    return Response("m3u8 retrieval not implemented", status=501)
+    
 
 @app.route('/search/', methods=['GET'])
 def search():
