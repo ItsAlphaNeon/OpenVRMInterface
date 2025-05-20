@@ -2,6 +2,7 @@ import json
 from flask import Flask, request, Response, stream_with_context
 import requests
 import logging
+from typing import Optional
 import random
 
 app = Flask(__name__)
@@ -16,7 +17,7 @@ class QueryObject:
         self.query = query            # query as a string
         self.results = results        # Results as a JSON-like dictionary
         
-def create_query_object(ip_address: str, id: int, query: str, results: dict={}) -> QueryObject:
+def create_query_object(ip_address: str, id: Optional[int], query: str, results: dict={}) -> QueryObject:
     id = id if id is not None else random.randint(1, 1000000)
     store_query_object(QueryObject(ip_address, id, query, results))
     return QueryObject(ip_address, id, query, results)
@@ -25,8 +26,7 @@ def store_query_object(query_object: QueryObject):
     logging.info(f"Storing query object: {query_object.__dict__}")
     # Store the query object in the in-memory storage
     query_object_storage.append(query_object)
-
-def retrieve_query_object(id: int) -> QueryObject:
+def retrieve_query_object(id: int) -> Optional[QueryObject]:
     # Retrieve the query object from the in-memory storage
     for obj in query_object_storage:
         if obj.id == id:
@@ -66,7 +66,7 @@ def search():
     ip_address = request.remote_addr
     logging.info(f"Received search request for {query} from {ip_address}") # Debug
     # Valid request, create a QueryObject
-    query_object = create_query_object(ip_address, None, query)
+    query_object = create_query_object(str(ip_address), None, query)
     # TODO: Implement API call to search for the query
     # TODO: Return the results in JSON format and the ID to the client
     
