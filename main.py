@@ -62,6 +62,77 @@ def retrieve_query_object(id: int) -> Optional[QueryObject]:
     return None
 
 
+# -=- Proxy Server Vars and Functions -=-
+SERVER_URL = "http://localhost:8080"
+Lookup_Table = []  # For mapping .ts file ids to URLs
+M3U8_Table = {}    # For mapping m3u8 ids to playlist content
+import re
+
+# Proxy endpoint for m3u8 playlists
+@app.route('/proxy/<m3u8_id>.m3u8', methods=['GET'])
+def proxy_m3u8(m3u8_id):
+    logging.info(f"Proxying m3u8 for id {m3u8_id}")
+    m3u8_content = M3U8_Table.get(m3u8_id)
+    if not m3u8_content:
+        logging.error(f"No m3u8 found for id {m3u8_id}")
+        return Response("Not found", status=404)
+    new_m3u8 = process_m3u8_content(m3u8_content, m3u8_id)
+    return Response(new_m3u8, mimetype="application/vnd.apple.mpegurl")
+
+# Proxy endpoint for .ts segments
+@app.route('/partial/<path:partial_url>', methods=['GET'])
+def partial(partial_url):
+    partial_id = partial_url.split(".")[0]
+    original_url = None
+    logging.info(f"Received request for partial_id {partial_id}")
+    for item in Lookup_Table:
+        if item[0] == partial_id:
+            original_url = item[1]
+            break
+    if original_url is None:
+        logging.error(f"Original URL not found for {partial_id}")
+        return Response(status=404)
+    try:
+        response = requests.get(original_url, stream=True, headers={"User-Agent": USER_AGENT})
+        response.raise_for_status()
+        logging.info(f"Received response from {original_url}")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error fetching {original_url}: {e}")
+        return Response(status=500)
+    headers = {
+        "Content-Type": "video/mp2t",
+        "Content-Length": response.headers.get('Content-Length')
+    }
+    return Response(
+        stream_with_context(response.iter_content(chunk_size=4096)),
+        headers=headers
+    )
+
+@app.after_request
+def apply_cors(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
+def process_m3u8_content(content, m3u8_id):
+    try:
+        logging.info("Processing m3u8 content")
+        drm_m3u8_lines = content.split("\n")
+        new_m3u8_lines = []
+        for line in drm_m3u8_lines:
+            if line.startswith("https"):
+                lookup_id = str(random.randint(1000000, 9999999))
+                proxy_lookup_url = f"{SERVER_URL}/partial/{lookup_id}.ts"
+                Lookup_Table.append((lookup_id, line))
+                new_m3u8_lines.append(proxy_lookup_url)
+            else:
+                new_m3u8_lines.append(line)
+        logging.info("Processed m3u8 content")
+        return "\n".join(new_m3u8_lines)
+    except Exception as e:
+        logging.error(f"Error processing m3u8 content: {e}")
+        return content
+
+
 @app.route("/submit/", methods=["GET"])
 def submit():
     id_param = request.args.get("id")
@@ -77,18 +148,15 @@ def submit():
     if not selection_id:
         logging.error("Missing 'selection' parameter")
         return Response("Missing 'selection' parameter", status=400)
-    # Valid request, start m3u8 retrieval
     query_object = retrieve_query_object(id_int)
     if not query_object:
         logging.error(f"Query object with ID {id_int} not found")
         return Response(f"Query object with ID {id_int} not found", status=404)
     try:
-        # Defensive: ensure VRM_ENDPOINT is not None
         vrm_endpoint = VRM_ENDPOINT or "https://vr-m.net/"
         vrm_endpoint = vrm_endpoint.rstrip('/')
-        # Step 1: Get lock_id from VRM /0/l/{selection_id}
         lock_url = f"{vrm_endpoint}/0/l/{selection_id}"
-        lock_resp = requests.get(lock_url, verify=False)
+        lock_resp = requests.get(lock_url, verify=False, headers={"User-Agent": USER_AGENT})
         if lock_resp.status_code != 200:
             logging.error(f"Failed to get lock_id from VRM: {lock_resp.status_code}")
             return Response("Failed to get lock_id from VRM", status=502)
@@ -103,15 +171,18 @@ def submit():
         if not lock_id:
             logging.error("lock_id not found in VRM response")
             return Response("lock_id not found in VRM response", status=502)
-        # Step 2: Get m3u8 file from VRM /p/{lock_id}.m3u8
         m3u8_url = f"{vrm_endpoint}/p/{lock_id}.m3u8"
-        m3u8_resp = requests.get(m3u8_url, verify=False)
+        m3u8_resp = requests.get(m3u8_url, verify=False, headers={"User-Agent": USER_AGENT})
         if m3u8_resp.status_code != 200:
             logging.error(f"Failed to get m3u8 from VRM: {m3u8_resp.status_code}")
             return Response("Failed to get m3u8 from VRM", status=502)
-        # Optionally, store m3u8 in QueryObject
+        # Store m3u8 in QueryObject and in M3U8_Table with a unique id
+        m3u8_id = str(random.randint(1000000, 9999999))
+        M3U8_Table[m3u8_id] = m3u8_resp.text
         query_object.results['m3u8'] = m3u8_resp.text
-        return Response(m3u8_resp.text, mimetype="application/vnd.apple.mpegurl")
+        # Return the proxy URL for the playlist
+        proxy_url = f"{SERVER_URL}/proxy/{m3u8_id}.m3u8"
+        return Response(proxy_url, mimetype="text/plain")
     except Exception as e:
         logging.error(f"Error during VRM m3u8 retrieval: {e}")
         return Response("Internal server error during m3u8 retrieval", status=500)
@@ -135,7 +206,7 @@ def search():
         # Step 1: Call VRM search API
         encoded_query = quote_plus(query)
         search_url = f"{vrm_endpoint}/0/s?q={encoded_query}"
-        resp = requests.get(search_url, verify=False)
+        resp = requests.get(search_url, verify=False, headers={"User-Agent": USER_AGENT})
         if resp.status_code != 200:
             logging.error(f"Failed to search VRM: {resp.status_code}")
             return Response("Failed to search VRM", status=502)
@@ -162,6 +233,8 @@ def search():
         logging.error(f"Error during VRM search: {e}")
         return Response("Internal server error during search", status=500)
 
+
+USER_AGENT = "NSPlayer/12.00.19041.5848 WMFSDK/12.00.19041.5848"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080, threaded=True)
