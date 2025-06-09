@@ -90,7 +90,7 @@ Given a search result ID and selection, retrieves and proxies the m3u8 playlist 
 **Example:**
 
 ```http
-GET http://localhost:8080/submit/?id=123456&selection=abcdef
+GET http://localhost:8080/submit/?id=123456&selection=0
 ```
 
 **Response:**
