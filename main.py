@@ -151,6 +151,14 @@ def submit():
     if not selection_id:
         logging.error("Missing 'selection' parameter")
         return Response("Missing 'selection' parameter", status=400)
+    try:
+        selection_int = int(selection_id)
+    except ValueError:
+        logging.error("Selection parameter must be an integer")
+        return Response("Selection parameter must be an integer", status=400)
+    if not (0 <= selection_int <= 10):
+        logging.error("Selection parameter must be between 0 and 10")
+        return Response("Selection parameter must be between 0 and 10", status=400)
     query_object = retrieve_query_object(id_int)
     if not query_object:
         logging.error(f"Query object with ID {id_int} not found")
@@ -221,7 +229,9 @@ def search():
             return Response("Failed to parse VRM search JSON", status=502)
         # Step 2: Extract results (assuming a list of movies with title and id)
         results = []
-        for item in results_json.get('results', []):
+        vrm_results = results_json.get('results', [])
+        # Limit to top 10 results for thumbnail API processing
+        for item in vrm_results[:10]:
             title = item.get('title') or item.get('name') or str(item)
             selection_id = item.get('id') or item.get('selectionID') or str(item)
             # TMDB thumbnail lookup
