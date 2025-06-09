@@ -7,13 +7,16 @@ import random
 import dotenv
 import os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 logging.basicConfig(level=logging.INFO)
 
 # .env file variables
 dotenv.load_dotenv()
 THEMOVIEDB_API_KEY = os.getenv("THEMOVIEDB_API_KEY")
 env_endpoint = os.getenv("VRM_ENDPOINT")
+HOST = os.getenv("HOST")
+if not HOST:
+    HOST = "http://localhost:8080"
 if env_endpoint is not None:
     VRM_ENDPOINT = 'https://' + env_endpoint
 else:
@@ -120,7 +123,7 @@ def process_m3u8_content(content, m3u8_id):
         new_m3u8_lines = []
         for line in drm_m3u8_lines:
             if line.startswith("https"):
-                lookup_id = str(random.randint(1000000, 9999999))
+                lookup_id = str(random.randint(1000000, 9999999999))
                 proxy_lookup_url = f"{SERVER_URL}/partial/{lookup_id}.ts"
                 Lookup_Table.append((lookup_id, line))
                 new_m3u8_lines.append(proxy_lookup_url)
@@ -167,7 +170,7 @@ def submit():
             lock_id = lock_data.get("lock_id")
         except Exception as e:
             logging.error(f"Failed to parse lock_id JSON: {e}")
-            return Response("Failed to parse lock_id JSON", status=502)
+            return Response("Failed to parse lock_id from VRM response", status=502)
         if not lock_id:
             logging.error("lock_id not found in VRM response")
             return Response("lock_id not found in VRM response", status=502)
@@ -221,7 +224,23 @@ def search():
         for item in results_json.get('results', []):
             title = item.get('title') or item.get('name') or str(item)
             selection_id = item.get('id') or item.get('selectionID') or str(item)
-            results.append({"title": title, "selectionID": selection_id})
+            # TMDB thumbnail lookup
+            thumbnail_url = None
+            try:
+                tmdb_search_url = f"https://api.themoviedb.org/3/search/movie?query={quote_plus(title)}&api_key={THEMOVIEDB_API_KEY}"
+                tmdb_resp = requests.get(tmdb_search_url)
+                if tmdb_resp.status_code == 200:
+                    tmdb_data = tmdb_resp.json()
+                    if tmdb_data.get('results'):
+                        poster_path = tmdb_data['results'][0].get('poster_path')
+                        if poster_path:
+                            thumbnail_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
+                if not thumbnail_url:
+                    thumbnail_url = f"{HOST}/static/fallback.png"
+            except Exception as e:
+                logging.warning(f"TMDB lookup failed for '{title}': {e}")
+                thumbnail_url = "/static/fallback.png"
+            results.append({"title": title, "selectionID": selection_id, "thumbnail": thumbnail_url})
         # Store results in QueryObject
         query_object.results['results'] = results
         data = {
@@ -233,7 +252,7 @@ def search():
         logging.error(f"Error during VRM search: {e}")
         return Response("Internal server error during search", status=500)
 
-
+# Without this exact user agent, the VRM API will not respond correctly
 USER_AGENT = "NSPlayer/12.00.19041.5848 WMFSDK/12.00.19041.5848"
 
 if __name__ == "__main__":
