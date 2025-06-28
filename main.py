@@ -25,16 +25,16 @@ if not THEMOVIEDB_API_KEY or not VRM_ENDPOINT:
     logging.error("Missing environment variables: THEMOVIEDB_API_KEY or VRM_ENDPOINT")
     exit(1)
 
-# In-memory storage for query objects, Long-term storage isn't necessary
+# In-memory storage for query objects
 query_object_storage = []
 
-
+# Query object is the main data structure for storing search queries and results
 class QueryObject:
     def __init__(self, ip_address: str, id: int, query: str, results: dict):
-        self.ip_address = ip_address  # IP Address as a string
-        self.id = id  # ID as an integer
-        self.query = query  # query as a string
-        self.results = results  # Results as a JSON-like dictionary
+        self.ip_address = ip_address
+        self.id = id
+        self.query = query
+        self.results = results
 
     def __repr__(self):
         return f"<QueryObject id={self.id} ip={self.ip_address} query={self.query}>"
@@ -45,7 +45,8 @@ def create_query_object(
 ) -> QueryObject:
     if results is None:
         results = {}
-    id = id if id is not None else random.randint(1, 1000000)
+    # TODO: This should be changed because by some ungodly chance we could generate the same ID twice
+    id = id if id is not None else random.randint(1, 100000000)
     obj = QueryObject(ip_address, id, query, results)
     store_query_object(obj)
     return obj
@@ -65,7 +66,7 @@ def retrieve_query_object(id: int) -> Optional[QueryObject]:
     return None
 
 
-# -=- Proxy Server Vars and Functions -=-
+# Proxy Server Vars and Functions
 SERVER_URL = "http://localhost:8080"
 Lookup_Table = []  # For mapping .ts file ids to URLs
 M3U8_Table = {}    # For mapping m3u8 ids to playlist content
@@ -83,6 +84,7 @@ def proxy_m3u8(m3u8_id):
     return Response(new_m3u8, mimetype="application/vnd.apple.mpegurl")
 
 # Proxy endpoint for .ts segments
+# The point of this is to ensure compatability with legacy VLC versions that expect .ts files
 @app.route('/partial/<path:partial_url>', methods=['GET'])
 def partial(partial_url):
     partial_id = partial_url.split(".")[0]
@@ -116,6 +118,7 @@ def apply_cors(response):
     response.headers["Access-Control-Allow-Origin"] = "*"
     return response
 
+# Process m3u8 content to replace .ts URLs with proxy URLs
 def process_m3u8_content(content, m3u8_id):
     try:
         logging.info("Processing m3u8 content")
@@ -135,7 +138,7 @@ def process_m3u8_content(content, m3u8_id):
         logging.error(f"Error processing m3u8 content: {e}")
         return content
 
-
+# Endpoint to handle selection and return proxied m3u8 URL
 @app.route("/submit/", methods=["GET"])
 def submit():
     id_param = request.args.get("id")
@@ -198,7 +201,7 @@ def submit():
         logging.error(f"Error during VRM m3u8 retrieval: {e}")
         return Response("Internal server error during m3u8 retrieval", status=500)
 
-
+# Endpoint to handle search requests
 @app.route("/search/", methods=["GET"])
 def search():
     query = request.args.get("query")
@@ -262,7 +265,7 @@ def search():
         logging.error(f"Error during VRM search: {e}")
         return Response("Internal server error during search", status=500)
 
-# Without this exact user agent, the VRM API will not respond correctly
+# Without this exact user agent, the VRM API will not deny the request
 USER_AGENT = "NSPlayer/12.00.19041.5848 WMFSDK/12.00.19041.5848"
 
 if __name__ == "__main__":
