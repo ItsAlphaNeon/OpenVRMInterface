@@ -75,7 +75,7 @@ GET http://localhost:8080/search/?query=Inception
   "results": [
     {
       "title": "Inception",
-      "selectionID": "...",
+      "selectionID": "0",
       "thumbnail": "https://image.tmdb.org/t/p/w500/...jpg"
     },
     ...
