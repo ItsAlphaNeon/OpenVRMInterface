@@ -233,7 +233,7 @@ def search():
         # Limit to top 10 results for thumbnail API processing
         for item in vrm_results[:10]:
             title = item.get('title') or item.get('name') or str(item)
-            selection_id = item.get('id') or item.get('selectionID') or str(item)
+            selection_id = item.get('index')
             # TMDB thumbnail lookup
             thumbnail_url = None
             try:
