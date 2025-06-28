@@ -13,7 +13,7 @@ A Flask-based proxy and search interface for the VRM streaming API, with integra
 
 - Python 3.10+
 - [Flask](https://flask.palletsprojects.com/)
-- [requests](https://docs.python-requests.org/)
+- [requests](https://pypi.org/project/requests/)
 - [python-dotenv](https://pypi.org/project/python-dotenv/)
 
 Install dependencies:
