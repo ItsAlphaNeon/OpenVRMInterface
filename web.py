@@ -8,6 +8,7 @@ from flask import Flask, render_template_string, request, jsonify
 # It starts the backend as a subprocess and provides a GUI to interact with it.
 # Make sure to have the OpenVRMInterface backend (main.py) in the same directory.
 # This file is not essential for the backend to work, but provides a convenient way to test it.
+# Shitass chatgpt code btw, I didn't want to focus on this, I literally just needed it for testing.
 
 # Start main.py as a subprocess
 backend_proc = subprocess.Popen(["python3", "main.py"])
