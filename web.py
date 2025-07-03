@@ -2,6 +2,8 @@ import subprocess
 import threading
 import time
 import requests
+import sys
+import platform
 from flask import Flask, render_template_string, request, jsonify
 
 # This is a simple web interface to test the OpenVRMInterface backend.
@@ -10,8 +12,11 @@ from flask import Flask, render_template_string, request, jsonify
 # This file is not essential for the backend to work, but provides a convenient way to test it.
 # Shitass chatgpt code btw, I didn't want to focus on this, I literally just needed it for testing.
 
+# Determine the correct Python executable for the current platform
+python_exe = sys.executable if sys.executable else ("python" if platform.system() == "Windows" else "python3")
+
 # Start main.py as a subprocess
-backend_proc = subprocess.Popen(["python3", "main.py"])
+backend_proc = subprocess.Popen([python_exe, "main.py"])
 
 
 def shutdown_backend():
